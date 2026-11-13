@@ -3,12 +3,13 @@ import json
 import os
 import websockets
 import requests
+from aiohttp import web
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
 async def search_with_gemini(query):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"role": "user", "parts": [{"text": query}]}],
         "tools": [{"googleSearch": {}}],
@@ -69,5 +70,21 @@ async def handle_mcp():
             print(f"Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
             await asyncio.sleep(5)
 
+# Petit serveur web factice pour valider le plan gratuit Web Service de Render
+async def health_check(request):
+    return web.Response(text="Pont MCP Xiaozhi actif")
+
+async def main():
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
+    # Lance la boucle WebSocket Xiaozhi en parallèle
+    await handle_mcp()
+
 if __name__ == "__main__":
-    asyncio.run(handle_mcp())
+    asyncio.run(main())
