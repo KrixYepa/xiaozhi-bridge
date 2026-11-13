@@ -1,3 +1,4 @@
 Plaintext
 websockets
 requests
+aiohttp
