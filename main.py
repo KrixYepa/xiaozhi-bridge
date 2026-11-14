@@ -34,7 +34,8 @@ async def search_with_tavily(query):
 async def handle_mcp():
     while True:
         try:
-            async with websockets.connect(MCP_WSS_URL) as websocket:
+            # Ajout de ping_interval et ping_timeout pour garder la ligne active
+            async with websockets.connect(MCP_WSS_URL, ping_interval=20, ping_timeout=20) as websocket:
                 print("Connecté avec succès au serveur MCP de Xiaozhi !")
                 async for message in websocket:
                     data = json.loads(message)
@@ -78,7 +79,6 @@ async def handle_mcp():
         except Exception as e:
             print(f"Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
             await asyncio.sleep(5)
-
 async def health_check(request):
     return web.Response(text="Pont MCP Tavily actif")
 
