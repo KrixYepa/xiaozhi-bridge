@@ -10,9 +10,12 @@ MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
 async def search_with_tavily(query):
     url = "https://api.tavily.com/search"
+    # On force le contexte en français dans la requête envoyée à Tavily
+    french_query = f"Réponds obligatoirement en français : {query}"
+    
     payload = {
         "api_key": TAVILY_API_KEY,
-        "query": query,
+        "query": french_query,
         "search_depth": "basic",
         "include_answer": True,
         "max_results": 3
