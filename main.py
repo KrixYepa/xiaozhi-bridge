@@ -10,7 +10,6 @@ MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
 async def search_with_tavily(query):
     url = "https://api.tavily.com/search"
-    # On force le contexte en français dans la requête envoyée à Tavily
     french_query = f"Réponds obligatoirement en français : {query}"
     
     payload = {
@@ -31,12 +30,23 @@ async def search_with_tavily(query):
     except Exception as e:
         return f"Erreur de recherche : {str(e)}"
 
+async def keep_alive(websocket):
+    """Envoie un ping applicatif régulier pour éviter la coupure par inactivité."""
+    while True:
+        await asyncio.sleep(25)
+        try:
+            await websocket.send(json.dumps({"jsonrpc": "2.0", "method": "ping"}))
+        except Exception:
+            break
+
 async def handle_mcp():
     while True:
+        ping_task = None
         try:
-            # Ajout de ping_interval et ping_timeout pour garder la ligne active
             async with websockets.connect(MCP_WSS_URL, ping_interval=20, ping_timeout=20) as websocket:
                 print("Connecté avec succès au serveur MCP de Xiaozhi !")
+                ping_task = asyncio.create_task(keep_alive(websocket))
+                
                 async for message in websocket:
                     data = json.loads(message)
                     msg_id = data.get("id")
@@ -79,6 +89,10 @@ async def handle_mcp():
         except Exception as e:
             print(f"Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
             await asyncio.sleep(5)
+        finally:
+            if ping_task:
+                ping_task.cancel()
+
 async def health_check(request):
     return web.Response(text="Pont MCP Tavily actif")
 
