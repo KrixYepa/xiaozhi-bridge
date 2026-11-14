@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import os
@@ -6,29 +5,28 @@ import websockets
 import requests
 from aiohttp import web
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
-async def search_with_gemini(query):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={GEMINI_API_KEY}"
+async def search_with_tavily(query):
+    url = "https://api.tavily.com/search"
     payload = {
-        "contents": [{"role": "user", "parts": [{"text": query}]}],
-        "tools": [{"googleSearch": {}}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 350}
+        "api_key": TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "basic",
+        "include_answer": True,
+        "max_results": 3
     }
     try:
         response = requests.post(url, json=payload)
         data = response.json()
-        print(f"Réponse brute Gemini : {json.dumps(data)}")
+        print(f"Réponse brute Tavily : {json.dumps(data)}")
         
-        candidates = data.get("candidates")
-        if not candidates:
-            error_msg = data.get('error', {}).get('message', 'Réponse vide de l\'API')
-            return f"Erreur Gemini : {error_msg}"
-            
-        return candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "Aucun résultat trouvé.")
+        if "answer" in data and data["answer"]:
+            return data["answer"]
+        return "Je n'ai pas trouvé de réponse précise sur le web."
     except Exception as e:
-        return f"Erreur technique : {str(e)}"
+        return f"Erreur de recherche : {str(e)}"
 
 async def handle_mcp():
     while True:
@@ -47,7 +45,7 @@ async def handle_mcp():
                             "result": {
                                 "protocolVersion": "2024-11-05",
                                 "capabilities": {"tools": {}},
-                                "serverInfo": {"name": "xiaozhi-gemini-bridge", "version": "1.0.0"}
+                                "serverInfo": {"name": "xiaozhi-tavily-bridge", "version": "1.0.0"}
                             }
                         }))
                     elif method == "tools/list":
@@ -56,7 +54,7 @@ async def handle_mcp():
                             "result": {
                                 "tools": [{
                                     "name": "recherche_web",
-                                    "description": "Recherche des informations récentes sur internet via Google (météo, actualités).",
+                                    "description": "Recherche des informations récentes sur internet (météo, actualités).",
                                     "inputSchema": {
                                         "type": "object",
                                         "properties": {"requete": {"type": "string", "description": "La recherche à effectuer."}},
@@ -69,7 +67,7 @@ async def handle_mcp():
                         if params.get("name") == "recherche_web":
                             query = params.get("arguments", {}).get("requete")
                             print(f"Recherche demandée : {query}")
-                            result_text = await search_with_gemini(query)
+                            result_text = await search_with_tavily(query)
                             await websocket.send(json.dumps({
                                 "jsonrpc": "2.0", "id": msg_id,
                                 "result": {"content": [{"type": "text", "text": result_text}], "isError": False}
@@ -79,7 +77,7 @@ async def handle_mcp():
             await asyncio.sleep(5)
 
 async def health_check(request):
-    return web.Response(text="Pont MCP Xiaozhi actif")
+    return web.Response(text="Pont MCP Tavily actif")
 
 async def main():
     app = web.Application()
