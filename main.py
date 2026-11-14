@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 import os
@@ -18,7 +19,14 @@ async def search_with_gemini(query):
     try:
         response = requests.post(url, json=payload)
         data = response.json()
-        return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "Aucun résultat trouvé.")
+        print(f"Réponse brute Gemini : {json.dumps(data)}")
+        
+        candidates = data.get("candidates")
+        if not candidates:
+            error_msg = data.get('error', {}).get('message', 'Réponse vide de l\'API')
+            return f"Erreur Gemini : {error_msg}"
+            
+        return candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "Aucun résultat trouvé.")
     except Exception as e:
         return f"Erreur technique : {str(e)}"
 
@@ -70,7 +78,6 @@ async def handle_mcp():
             print(f"Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
             await asyncio.sleep(5)
 
-# Petit serveur web factice pour valider le plan gratuit Web Service de Render
 async def health_check(request):
     return web.Response(text="Pont MCP Xiaozhi actif")
 
@@ -82,8 +89,6 @@ async def main():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    
-    # Lance la boucle WebSocket Xiaozhi en parallèle
     await handle_mcp()
 
 if __name__ == "__main__":
