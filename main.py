@@ -18,50 +18,48 @@ def nettoyer_pour_voix(texte):
     return texte[:600]
 
 async def search_with_tavily(query):
-    if not TAVILY_API_KEY:
-        return "Erreur : clé API Tavily manquante."
-
-    url = "https://tavily.com"
-    headers = {"Content-Type": "application/json"}
-
+    url = "https://api.tavily.com/search"
+    french_query = f"Réponds obligatoirement en français de manière concise : {query}"
+    
     payload = {
         "api_key": TAVILY_API_KEY,
-        "query": query,
+        "query": french_query,
         "search_depth": "basic",
         "include_answer": True,
         "max_results": 3
     }
-
+    
     timeout = aiohttp.ClientTimeout(total=8)
-
+    connector = aiohttp.TCPConnector(ssl=False) # Contourne les erreurs de certificats SSL sur Render
+    
     try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=payload, headers=headers) as response:
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+            async with session.post(url, json=payload) as response:
                 if response.status != 200:
                     err_text = await response.text()
                     print(f"❌ Erreur HTTP Tavily ({response.status}) : {err_text}")
                     return "Le moteur de recherche est temporairement indisponible."
-
+                
                 data = await response.json()
                 print(f"✅ Réponse Tavily reçue pour '{query}'")
-
+                
                 if data.get("answer"):
-                    return nettoyer_pour_voix(data["answer"])
-
+                    return data["answer"]
+                
                 results = data.get("results", [])
-                extraits = [nettoyer_pour_voix(r.get("content", "")) for r in results[:2] if r.get("content")]
-                if extraits:
-                    return " | ".join(extraits)[:600]
-
+                if results and results[0].get("content"):
+                    return results[0]["content"][:500]
+                
                 return "Aucune information récente trouvée sur ce sujet."
-
+                
     except asyncio.TimeoutError:
         print(f"⏱️ Timeout Tavily pour : {query}")
         return "La recherche a pris trop de temps, réessaie dans un instant."
     except Exception as e:
-        print(f"❌ Exception recherche : {str(e)}")
-        return "Erreur technique lors de la recherche."
+        print(f"❌ Exception recherche : {type(e).__name__} - {str(e)}")
+        return f"Erreur technique ({type(e).__name__}) lors de la recherche."
 
+    
 async def keep_alive(websocket):
     while True:
         await asyncio.sleep(25)
@@ -69,6 +67,7 @@ async def keep_alive(websocket):
             await websocket.send(json.dumps({"jsonrpc": "2.0", "method": "ping"}))
         except Exception:
             break
+
 
 async def handle_mcp():
     if not MCP_WSS_URL:
@@ -132,7 +131,7 @@ async def handle_mcp():
                             }))
         except Exception as e:
             print(f"⚠️ Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)
         finally:
             if ping_task:
                 ping_task.cancel()
