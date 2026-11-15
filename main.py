@@ -10,7 +10,6 @@ TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
 def nettoyer_pour_voix(texte):
-    """Supprime les URLs et balises Markdown pour éviter que le robot ne les épelle à voix haute."""
     if not texte:
         return ""
     texte = re.sub(r'http[s]?://\S+', '', texte)
@@ -22,9 +21,9 @@ async def search_with_tavily(query):
     if not TAVILY_API_KEY:
         return "Erreur : clé API Tavily manquante."
 
-       url = "https://tavily.com"
+    url = "https://tavily.com"
     headers = {"Content-Type": "application/json"}
-    
+
     payload = {
         "api_key": TAVILY_API_KEY,
         "query": query,
@@ -32,12 +31,9 @@ async def search_with_tavily(query):
         "include_answer": True,
         "max_results": 3
     }
-        
-            
 
-    
     timeout = aiohttp.ClientTimeout(total=8)
-    
+
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=payload, headers=headers) as response:
@@ -45,22 +41,20 @@ async def search_with_tavily(query):
                     err_text = await response.text()
                     print(f"❌ Erreur HTTP Tavily ({response.status}) : {err_text}")
                     return "Le moteur de recherche est temporairement indisponible."
-                
+
                 data = await response.json()
                 print(f"✅ Réponse Tavily reçue pour '{query}'")
-                
-                # 1. Synthèse directe de Tavily (nettoyée pour la voix)
+
                 if data.get("answer"):
                     return nettoyer_pour_voix(data["answer"])
-                
-                # 2. Repli : combine les 2 meilleurs extraits nettoyés
+
                 results = data.get("results", [])
                 extraits = [nettoyer_pour_voix(r.get("content", "")) for r in results[:2] if r.get("content")]
                 if extraits:
                     return " | ".join(extraits)[:600]
-                
+
                 return "Aucune information récente trouvée sur ce sujet."
-                
+
     except asyncio.TimeoutError:
         print(f"⏱️ Timeout Tavily pour : {query}")
         return "La recherche a pris trop de temps, réessaie dans un instant."
@@ -87,7 +81,7 @@ async def handle_mcp():
             async with websockets.connect(MCP_WSS_URL, ping_interval=20, ping_timeout=20) as websocket:
                 print("✅ Connecté avec succès au serveur MCP de Xiaozhi !")
                 ping_task = asyncio.create_task(keep_alive(websocket))
-                
+
                 async for message in websocket:
                     try:
                         data = json.loads(message)
