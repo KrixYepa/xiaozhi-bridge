@@ -22,7 +22,8 @@ async def search_with_tavily(query):
     if not TAVILY_API_KEY:
         return "Erreur : clé API Tavily manquante."
 
-    url = "https://tavily.com"
+       url = "https://tavily.com"
+    headers = {"Content-Type": "application/json"}
     
     payload = {
         "api_key": TAVILY_API_KEY,
@@ -31,12 +32,15 @@ async def search_with_tavily(query):
         "include_answer": True,
         "max_results": 3
     }
+        
+            
+
     
     timeout = aiohttp.ClientTimeout(total=8)
     
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=payload) as response:
+            async with session.post(url, json=payload, headers=headers) as response:
                 if response.status != 200:
                     err_text = await response.text()
                     print(f"❌ Erreur HTTP Tavily ({response.status}) : {err_text}")
