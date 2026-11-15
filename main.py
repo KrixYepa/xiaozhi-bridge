@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import websockets
-import requests
+import aiohttp
 from aiohttp import web
 
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
@@ -10,7 +10,7 @@ MCP_WSS_URL = os.environ.get("MCP_WSS_URL")
 
 async def search_with_tavily(query):
     url = "https://api.tavily.com/search"
-    french_query = f"Réponds obligatoirement en français : {query}"
+    french_query = f"Réponds obligatoirement en français de manière concise : {query}"
     
     payload = {
         "api_key": TAVILY_API_KEY,
@@ -19,19 +19,39 @@ async def search_with_tavily(query):
         "include_answer": True,
         "max_results": 3
     }
+    
+    timeout = aiohttp.ClientTimeout(total=8) # Évite que Xiaozhi n'attende trop longtemps
+    
     try:
-        response = requests.post(url, json=payload)
-        data = response.json()
-        print(f"Réponse brute Tavily : {json.dumps(data)}")
-        
-        if "answer" in data and data["answer"]:
-            return data["answer"]
-        return "Je n'ai pas trouvé de réponse précise sur le web."
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload) as response:
+                if response.status != 200:
+                    err_text = await response.text()
+                    print(f"❌ Erreur HTTP Tavily ({response.status}) : {err_text}")
+                    return "Le moteur de recherche est temporairement indisponible."
+                
+                data = await response.json()
+                print(f"✅ Réponse Tavily reçue pour '{query}'")
+                
+                # 1. On prend la réponse synthétisée si elle existe
+                if data.get("answer"):
+                    return data["answer"]
+                
+                # 2. Repli : si pas de synthèse, on prend le premier extrait brut trouvé
+                results = data.get("results", [])
+                if results and results[0].get("content"):
+                    return results[0]["content"][:500]
+                
+                return "Aucune information récente trouvée sur ce sujet."
+                
+    except asyncio.TimeoutError:
+        print(f"⏱️ Timeout Tavily pour : {query}")
+        return "La recherche a pris trop de temps, réessaie dans un instant."
     except Exception as e:
-        return f"Erreur de recherche : {str(e)}"
+        print(f"❌ Exception recherche : {str(e)}")
+        return f"Erreur technique lors de la recherche."
 
 async def keep_alive(websocket):
-    """Envoie un ping applicatif régulier pour éviter la coupure par inactivité."""
     while True:
         await asyncio.sleep(25)
         try:
@@ -59,7 +79,7 @@ async def handle_mcp():
                             "result": {
                                 "protocolVersion": "2024-11-05",
                                 "capabilities": {"tools": {}},
-                                "serverInfo": {"name": "xiaozhi-tavily-bridge", "version": "1.0.0"}
+                                "serverInfo": {"name": "xiaozhi-tavily-bridge", "version": "1.1.0"}
                             }
                         }))
                     elif method == "tools/list":
@@ -68,7 +88,7 @@ async def handle_mcp():
                             "result": {
                                 "tools": [{
                                     "name": "recherche_web",
-                                    "description": "Recherche des informations récentes sur internet (météo, actualités).",
+                                    "description": "Recherche des informations récentes sur internet (météo, actualités, faits).",
                                     "inputSchema": {
                                         "type": "object",
                                         "properties": {"requete": {"type": "string", "description": "La recherche à effectuer."}},
@@ -80,7 +100,7 @@ async def handle_mcp():
                     elif method == "tools/call":
                         if params.get("name") == "recherche_web":
                             query = params.get("arguments", {}).get("requete")
-                            print(f"Recherche demandée : {query}")
+                            print(f"🔍 Recherche demandée par le robot : {query}")
                             result_text = await search_with_tavily(query)
                             await websocket.send(json.dumps({
                                 "jsonrpc": "2.0", "id": msg_id,
