@@ -43,14 +43,17 @@ async def search_with_tavily(query):
                 data = await response.json()
                 print(f"✅ Réponse Tavily reçue pour '{query}'")
                 
+                brut = ""
                 if data.get("answer"):
-                    return data["answer"]
+                    brut = data["answer"]
+                else:
+                    results = data.get("results", [])
+                    if results and results[0].get("content"):
+                        brut = results[0]["content"][:500]
+                    else:
+                        brut = "Aucune information récente trouvée sur ce sujet."
                 
-                results = data.get("results", [])
-                if results and results[0].get("content"):
-                    return results[0]["content"][:500]
-                
-                return "Aucune information récente trouvée sur ce sujet."
+                return nettoyer_pour_voix(brut)
                 
     except asyncio.TimeoutError:
         print(f"⏱️ Timeout Tavily pour : {query}")
@@ -59,7 +62,6 @@ async def search_with_tavily(query):
         print(f"❌ Exception recherche : {type(e).__name__} - {str(e)}")
         return f"Erreur technique ({type(e).__name__}) lors de la recherche."
 
-    
 async def keep_alive(websocket):
     while True:
         await asyncio.sleep(25)
@@ -67,7 +69,6 @@ async def keep_alive(websocket):
             await websocket.send(json.dumps({"jsonrpc": "2.0", "method": "ping"}))
         except Exception:
             break
-
 
 async def handle_mcp():
     if not MCP_WSS_URL:
@@ -130,7 +131,7 @@ async def handle_mcp():
                                 "result": {"content": [{"type": "text", "text": result_text}], "isError": False}
                             }))
         except Exception as e:
-            print(f"⚠️ Déconnexion ({e}), nouvelle tentative dans 5 secondes...")
+            print(f"⚠️ Déconnexion ({e}), nouvelle tentative dans 1 seconde...")
             await asyncio.sleep(1)
         finally:
             if ping_task:
